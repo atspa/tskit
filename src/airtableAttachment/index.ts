@@ -1,6 +1,6 @@
 // airtableAttachment.ts
 
-import objectSize from "./objectSize.js";
+import objectSize from "../objectSize/index.ts";
 
 export type ObjectOrBuffer =
     | Record<string, unknown>

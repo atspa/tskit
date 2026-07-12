@@ -1,5 +1,5 @@
 import { argv, argv0, cwd } from "node:process";
-import { fetchGSheetSchena } from "../index.ts";
+import { fetchGSheetSchema } from "../index.ts";
 
 /** inline args */
 const iArgs = argv.slice(2)
@@ -13,7 +13,7 @@ if (!TOKEN || typeof TOKEN !== 'string') {
 };
 
 
-const schema = await fetchGSheetSchena({
+const schema = await fetchGSheetSchema({
     spreadsheetId:
         "1kspw-4paT-eE5-mrCrc4R9tg70lH2ZTFrJOUmOtOytg",
     apiKey: TOKEN,

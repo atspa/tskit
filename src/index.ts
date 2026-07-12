@@ -1,6 +1,6 @@
-import fetchGSheetSchena from "./fetchGsheetSchema/index.ts";
+import fetchGSheetSchema from "./fetchGsheetSchema/index.ts";
 import objectSize from "./objectSize/index.ts";
 
-export { fetchGSheetSchena, objectSize };
+export { fetchGSheetSchema, objectSize };
 
-export default { fetchGSheetSchena, objectSize };
+export default { fetchGSheetSchema, objectSize };

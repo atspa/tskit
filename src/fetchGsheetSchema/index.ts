@@ -49,7 +49,7 @@ export type FetchGSheetSchenaOptions = {
     excludeTablesInBandedRanges?: boolean;
 };
 
-export async function fetchGSheetSchena({
+export async function fetchGSheetSchema({
     spreadsheetId,
     apiKey,
     includeGridData = false,
@@ -124,7 +124,7 @@ export async function fetchGSheetSchena({
     return normalizeGSpreadsheet(payload);
 }
 
-export default fetchGSheetSchena;
+export default fetchGSheetSchema;
 
 function normalizeGSpreadsheet(payload: JsonObject): GSpreadsheet {
     const {

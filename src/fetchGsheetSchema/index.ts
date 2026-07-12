@@ -22,7 +22,7 @@ export type GSpreadsheet = JsonObject & {
     dataSourceSchedules: JsonObject[];
 };
 
-export type FetchGSheetSchenaOptions = {
+export type FetchGSheetSchemaOptions = {
     spreadsheetId: string;
     apiKey: string;
 
@@ -55,7 +55,7 @@ export async function fetchGSheetSchema({
     includeGridData = false,
     ranges = [],
     excludeTablesInBandedRanges = false,
-}: FetchGSheetSchenaOptions): Promise<GSpreadsheet> {
+}: FetchGSheetSchemaOptions): Promise<GSpreadsheet> {
     if (!spreadsheetId) {
         throw new TypeError("spreadsheetId is required");
     }

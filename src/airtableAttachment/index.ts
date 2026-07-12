@@ -1,4 +1,4 @@
-// airtableAttachment.ts
+// airtableAttachment/index.ts
 
 import objectSize from "../objectSize/index.ts";
 
@@ -9,6 +9,12 @@ export type ObjectOrBuffer =
     | Blob;
 
 export type ObjectSizeReturnType = ReturnType<typeof objectSize>;
+
+export type FetchLike = (...args: unknown[]) => Promise<Response>;
+
+export interface AirtableAttachmentInit {
+    fetch?: FetchLike;
+}
 
 export type DataTooLargeResult<T> = {
     error: "dataTooLarge";
@@ -49,11 +55,12 @@ export interface AirtableAttachmentModule {
     /**
      * Patches an Airtable record with the supplied JSON object.
      *
-     * Example data:
+     * Example:
+     *
      * {
-     *   fields: {
-     *     Attachments: []
-     *   }
+     *     fields: {
+     *         Attachments: [],
+     *     },
      * }
      */
     delete<T extends ObjectOrBuffer, R = unknown>(
@@ -103,11 +110,14 @@ type PreparedData = {
     contentType: string;
 };
 
+type AirtableTarget = {
+    baseId: string;
+    tableId: string | null;
+    recordId: string;
+    fieldIdOrName: string | null;
+};
+
 const MAX_ATTACHMENT_BYTES = 5 * 1024 ** 2;
-
-const CONTENT_API_ORIGIN = "https://content.airtable.com";
-const RECORD_API_ORIGIN = "https://api.airtable.com";
-
 const DEFAULT_PRECISION = 2;
 const BYTES_PER_MB = 1024 ** 2;
 
@@ -118,16 +128,38 @@ const BYTES_PER_MB = 1024 ** 2;
  */
 export default function airtableAttachment(
     apiKey: string,
+    init: AirtableAttachmentInit = {},
 ): AirtableAttachmentModule {
-    if (typeof apiKey !== "string" || apiKey.trim() === "") {
+    if (
+        typeof apiKey !== "string" ||
+        apiKey.trim() === ""
+    ) {
         throw new TypeError(
             "airtableAttachment requires a non-empty Airtable API key or PAT.",
         );
     }
 
+    const fetchImplementation =
+        init?.fetch ??
+        (
+            typeof globalThis.fetch === "function"
+                ? globalThis.fetch.bind(globalThis)
+                : fetch
+        );
+
+    if (!fetchImplementation) {
+        throw new Error(
+            "No fetch implementation is available. " +
+            "Pass one using airtableAttachment(apiKey, { fetch }).",
+        );
+    }
+
     const normalizedApiKey = apiKey.trim();
 
-    async function upload<T extends ObjectOrBuffer, R = unknown>(
+    async function upload<
+        T extends ObjectOrBuffer,
+        R = unknown,
+    >(
         data: T,
         pathOrUrl: string,
     ): Promise<AirtableAttachmentResult<T, R>> {
@@ -141,12 +173,10 @@ export default function airtableAttachment(
             };
         }
 
-        const url = normalizeUrl(
-            pathOrUrl,
-            CONTENT_API_ORIGIN,
-        );
+        const url = resolveUploadUrl(pathOrUrl);
 
         const response = await request<R>({
+            fetchImplementation,
             apiKey: normalizedApiKey,
             url,
             method: "POST",
@@ -165,13 +195,16 @@ export default function airtableAttachment(
         };
     }
 
-    async function update<T extends ObjectOrBuffer, R = unknown>(
+    async function update<
+        T extends ObjectOrBuffer,
+        R = unknown,
+    >(
         data: T,
         pathOrUrl: string,
     ): Promise<AirtableAttachmentResult<T, R>> {
         /*
-         * The direct upload endpoint appends a new attachment.
-         * Airtable does not mutate an existing attachment's bytes.
+         * Airtable's uploadAttachment endpoint appends an attachment.
+         * It cannot mutate the bytes of an existing attachment.
          */
         return upload<T, R>(data, pathOrUrl);
     }
@@ -194,12 +227,10 @@ export default function airtableAttachment(
             precision: DEFAULT_PRECISION,
         });
 
-        const url = normalizeUrl(
-            pathOrUrl,
-            RECORD_API_ORIGIN,
-        );
+        const url = resolveRecordUrl(pathOrUrl);
 
         const response = await request<R>({
+            fetchImplementation,
             apiKey: normalizedApiKey,
             url,
             method: "PATCH",
@@ -222,6 +253,158 @@ export default function airtableAttachment(
     });
 }
 
+function resolveUploadUrl(
+    pathOrUrl: string,
+): string {
+    const target = parseAirtableTarget(pathOrUrl);
+
+    if (!target.fieldIdOrName) {
+        throw new TypeError(
+            "The Airtable path must include an attachment field ID or field name.",
+        );
+    }
+
+    return (
+        "https://content.airtable.com/v0/" +
+        `${encodeURIComponent(target.baseId)}/` +
+        `${encodeURIComponent(target.recordId)}/` +
+        `${encodeURIComponent(target.fieldIdOrName)}/` +
+        "uploadAttachment"
+    );
+}
+
+function resolveRecordUrl(
+    pathOrUrl: string,
+): string {
+    const target = parseAirtableTarget(pathOrUrl);
+
+    if (!target.tableId) {
+        throw new TypeError(
+            "The Airtable path must include a table ID for record updates.",
+        );
+    }
+
+    return (
+        "https://api.airtable.com/v0/" +
+        `${encodeURIComponent(target.baseId)}/` +
+        `${encodeURIComponent(target.tableId)}/` +
+        `${encodeURIComponent(target.recordId)}`
+    );
+}
+
+function parseAirtableTarget(
+    pathOrUrl: string,
+): AirtableTarget {
+    if (
+        typeof pathOrUrl !== "string" ||
+        pathOrUrl.trim() === ""
+    ) {
+        throw new TypeError(
+            "pathOrUrl must be a non-empty string.",
+        );
+    }
+
+    const value = pathOrUrl.trim();
+    const isAbsoluteUrl = /^https?:\/\//i.test(value);
+
+    const url = new URL(
+        value,
+        "https://airtable.com/",
+    );
+
+    if (
+        isAbsoluteUrl &&
+        !isAirtableHostname(url.hostname)
+    ) {
+        throw new TypeError(
+            `Unsupported Airtable hostname: ${url.hostname}`,
+        );
+    }
+
+    const segments = url.pathname
+        .split("/")
+        .filter(Boolean)
+        .map(decodePathSegment);
+
+    const baseId =
+        segments.find(isBaseId) ??
+        null;
+
+    const tableId =
+        segments.find(isTableId) ??
+        null;
+
+    const recordIndex =
+        segments.findIndex(isRecordId);
+
+    const recordId =
+        recordIndex >= 0
+            ? segments[recordIndex]
+            : null;
+
+    const trailingSegments =
+        recordIndex >= 0
+            ? segments.slice(recordIndex + 1)
+            : [];
+
+    const fieldIdOrName =
+        trailingSegments.find(
+            segment =>
+                segment !== "uploadAttachment",
+        ) ??
+        null;
+
+    if (!baseId) {
+        throw new TypeError(
+            "Could not find an Airtable base ID beginning with 'app'.",
+        );
+    }
+
+    if (!recordId) {
+        throw new TypeError(
+            "Could not find an Airtable record ID beginning with 'rec'.",
+        );
+    }
+
+    return {
+        baseId,
+        tableId,
+        recordId,
+        fieldIdOrName,
+    };
+}
+
+function isBaseId(value: string): boolean {
+    return /^app[a-zA-Z0-9]+$/.test(value);
+}
+
+function isTableId(value: string): boolean {
+    return /^tbl[a-zA-Z0-9]+$/.test(value);
+}
+
+function isRecordId(value: string): boolean {
+    return /^rec[a-zA-Z0-9]+$/.test(value);
+}
+
+function isAirtableHostname(
+    hostname: string,
+): boolean {
+    return (
+        hostname === "airtable.com" ||
+        hostname.endsWith(".airtable.com")
+    );
+}
+
+function decodePathSegment(
+    segment: string,
+): string {
+    try {
+        return decodeURIComponent(segment);
+    } catch {
+        return segment;
+    }
+}
+
 async function prepareData(
     data: ObjectOrBuffer,
 ): Promise<PreparedData> {
@@ -233,10 +416,13 @@ async function prepareData(
         return {
             bytes,
             byteLength: bytes.byteLength,
-            dataSize: bytesToMegabytes(bytes.byteLength),
+            dataSize: bytesToMegabytes(
+                bytes.byteLength,
+            ),
             filename: getBlobFilename(data),
             contentType:
-                data.type || "application/octet-stream",
+                data.type ||
+                "application/octet-stream",
         };
     }
 
@@ -246,9 +432,12 @@ async function prepareData(
         return {
             bytes,
             byteLength: bytes.byteLength,
-            dataSize: bytesToMegabytes(bytes.byteLength),
+            dataSize: bytesToMegabytes(
+                bytes.byteLength,
+            ),
             filename: "data.bin",
-            contentType: "application/octet-stream",
+            contentType:
+                "application/octet-stream",
         };
     }
 
@@ -262,9 +451,12 @@ async function prepareData(
         return {
             bytes,
             byteLength: bytes.byteLength,
-            dataSize: bytesToMegabytes(bytes.byteLength),
+            dataSize: bytesToMegabytes(
+                bytes.byteLength,
+            ),
             filename: "data.bin",
-            contentType: "application/octet-stream",
+            contentType:
+                "application/octet-stream",
         };
     }
 
@@ -281,13 +473,10 @@ async function prepareData(
     return {
         bytes,
         byteLength: bytes.byteLength,
-
-        // This is the return type and behavior of objectSize().
         dataSize: objectSize(data, {
             unit: "mb",
             precision: DEFAULT_PRECISION,
         }),
-
         filename: "data.json",
         contentType: "application/json",
     };
@@ -303,14 +492,18 @@ function isBinaryData(
     );
 }
 
-function isBlob(value: unknown): value is Blob {
+function isBlob(
+    value: unknown,
+): value is Blob {
     return (
         typeof Blob !== "undefined" &&
         value instanceof Blob
     );
 }
 
-function getBlobFilename(blob: Blob): string {
+function getBlobFilename(
+    blob: Blob,
+): string {
     if (
         typeof File !== "undefined" &&
         blob instanceof File &&
@@ -326,38 +519,16 @@ function bytesToMegabytes(
     byteLength: number,
 ): ObjectSizeReturnType {
     return Number(
-        (byteLength / BYTES_PER_MB).toFixed(
-            DEFAULT_PRECISION,
-        ),
+        (
+            byteLength /
+            BYTES_PER_MB
+        ).toFixed(DEFAULT_PRECISION),
     );
 }
 
-function normalizeUrl(
-    pathOrUrl: string,
-    defaultOrigin: string,
+function bytesToBase64(
+    bytes: Uint8Array,
 ): string {
-    if (
-        typeof pathOrUrl !== "string" ||
-        pathOrUrl.trim() === ""
-    ) {
-        throw new TypeError(
-            "pathOrUrl must be a non-empty string.",
-        );
-    }
-
-    const value = pathOrUrl.trim();
-
-    if (/^https?:\/\//i.test(value)) {
-        return value;
-    }
-
-    return new URL(
-        value.startsWith("/") ? value : `/${value}`,
-        defaultOrigin,
-    ).toString();
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
     const NodeBuffer = (
         globalThis as typeof globalThis & {
             Buffer?: {
@@ -366,7 +537,9 @@ function bytesToBase64(bytes: Uint8Array): string {
                     byteOffset?: number,
                     length?: number,
                 ): {
-                    toString(encoding: "base64"): string;
+                    toString(
+                        encoding: "base64",
+                    ): string;
                 };
             };
         }
@@ -408,11 +581,13 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 async function request<R>({
+    fetchImplementation,
     apiKey,
     url,
     method,
     body,
 }: {
+    fetchImplementation: FetchLike;
     apiKey: string;
     url: string;
     method: "POST" | "PATCH";
@@ -421,18 +596,22 @@ async function request<R>({
     status: number;
     data: R;
 }> {
-    const response = await fetch(url, {
-        method,
-        headers: {
-            Authorization: `Bearer ${apiKey}`,
-            Accept: "application/json",
-            "Content-Type": "application/json",
+    const response = await fetchImplementation(
+        url,
+        {
+            method,
+            headers: {
+                Authorization: `Bearer ${apiKey}`,
+                Accept: "application/json",
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(body),
         },
-        body: JSON.stringify(body),
-    });
+    );
 
     const text = await response.text();
-    const responseData = parseResponseBody(text);
+    const responseData =
+        parseResponseBody(text);
 
     if (!response.ok) {
         throw new AirtableAttachmentHttpError({
@@ -449,7 +628,9 @@ async function request<R>({
     };
 }
 
-function parseResponseBody(text: string): unknown {
+function parseResponseBody(
+    text: string,
+): unknown {
     if (text === "") {
         return null;
     }
@@ -459,4 +640,4 @@ function parseResponseBody(text: string): unknown {
     } catch {
         return text;
     }
-};
+}

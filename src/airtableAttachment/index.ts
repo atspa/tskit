@@ -245,12 +245,13 @@ export default function airtableAttachment(
         };
     }
 
-    return Object.freeze({
-        apiKey: normalizedApiKey,
+    return Object.freeze(Object.defineProperties({
         upload,
         update,
         delete: deleteAttachment,
-    });
+    }, {
+        apiKey: { value: normalizedApiKey }
+    }));
 }
 
 function resolveUploadUrl(

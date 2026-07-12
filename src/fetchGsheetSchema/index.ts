@@ -124,6 +124,8 @@ export async function fetchGSheetSchena({
     return normalizeGSpreadsheet(payload);
 }
 
+export default fetchGSheetSchena;
+
 function normalizeGSpreadsheet(payload: JsonObject): GSpreadsheet {
     const {
         spreadsheetId,

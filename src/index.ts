@@ -1,0 +1,1 @@
+export { fetchGSheetSchena } from "./fetchGsheetSchema/index.ts"

@@ -1,0 +1,26 @@
+{
+  "name": "tskit",
+  "description": "RSS module system.",
+  "version": "0.0.0-prea.1",
+  "type": "module",
+  "private": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/atspa/tskit.git"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "devDependencies": {
+    "@opengsd/gsd-core": "^1.6.1",
+    "@types/node": "^26.1.0",
+    "tsdown": "^0.22.3",
+    "typescript": "^6.0.3"
+  },
+  "engines": {
+    "node": ">=25"
+  }
+}

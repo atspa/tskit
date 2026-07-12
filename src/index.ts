@@ -1,5 +1,5 @@
-import fetchGSheetSchema from "./fetchGsheetSchema/index.ts";
-import objectSize from "./objectSize/index.ts";
+import { fetchGSheetSchema } from "./fetchGsheetSchema/index.ts";
+import { objectSize } from "./objectSize/index.ts";
 
 export { fetchGSheetSchema, objectSize };
 

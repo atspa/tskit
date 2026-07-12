@@ -7,13 +7,7 @@ export interface ObjectSizeOptions {
     precision?: number;
 }
 
-const BYTES_PER_UNIT: Record<ObjectSizeUnit, number> = {
-    b: 1,
-    kb: 1024,
-    mb: 1024 ** 2,
-    gb: 1024 ** 3,
-    tb: 1024 ** 4,
-};
+
 
 /**
  * Calculates the UTF-8 byte size of an object's minified JSON representation.
@@ -28,11 +22,19 @@ const BYTES_PER_UNIT: Record<ObjectSizeUnit, number> = {
 export function objectSize(
     object: unknown,
     init: ObjectSizeOptions = {},
-): number {
+): { size: number, unit: ObjectSizeUnit } {
     const {
         unit = "mb",
         precision = 2,
     } = init;
+
+    const BYTES_PER_UNIT: Record<ObjectSizeUnit, number> = {
+        b: 1,
+        kb: 1024,
+        mb: 1024 ** 2,
+        gb: 1024 ** 3,
+        tb: 1024 ** 4,
+    }
 
     if (!Number.isInteger(precision) || precision < 0 || precision > 100) {
         throw new RangeError(
@@ -46,12 +48,17 @@ export function objectSize(
         throw new TypeError(
             "The provided value cannot be represented as JSON.",
         );
-    }
+    };
 
     const bytes = new TextEncoder().encode(json).byteLength;
-    const size = bytes / BYTES_PER_UNIT[unit];
+    const size = bytes / BYTES_PER_UNIT?.[unit] || BYTES_PER_UNIT?.[`mb`];
 
-    return Number(size.toFixed(precision));
+    const result = {
+        size: Number(size.toFixed(precision)),
+        unit
+    };
+
+    return result;
 }
 
 export default objectSize;

@@ -64,7 +64,7 @@ const BLOCKED_SCHEMES = new Set(['data:', 'javascript:', 'vbscript:']);
  * @param {ExtractLinksInit} [init]
  * @returns {ExtractedLink[]}
  */
-export function extractLinks(source, init = {}) {
+export function extractLinks(source: string, init = {}) {
   if (typeof source !== 'string') {
     throw new TypeError(`extractLinks: source must be a string; received ${typeof source}`);
   }
@@ -235,7 +235,7 @@ export default extractLinks;
  * @param {string} source
  * @param {(candidate: Candidate) => void} add
  */
-function collectHtmlLinks(source, add) {
+function collectHtmlLinks(source: string, add) {
   let baseHref = null;
   const lowerSource = source.toLowerCase();
   /** @type {Array<[number, number]>} */

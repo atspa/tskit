@@ -1,6 +1,6 @@
 {
   "name": "tskit",
-  "description": "RSS module system.",
+  "description": "TypeScript utilities.",
   "version": "0.0.0-prea.1",
   "type": "module",
   "private": false,

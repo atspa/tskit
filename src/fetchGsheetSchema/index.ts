@@ -52,7 +52,7 @@ export type FetchGSheetSchemaOptions = {
 export async function fetchGSheetSchema({
     spreadsheetId,
     apiKey,
-    includeGridData = false,
+    includeGridData = true,
     ranges = [],
     excludeTablesInBandedRanges = false,
 }: FetchGSheetSchemaOptions): Promise<GSpreadsheet> {
